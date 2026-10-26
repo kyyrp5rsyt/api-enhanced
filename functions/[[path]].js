@@ -5,29 +5,29 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-// Compatibility shims required before server.js is loaded:
-// - __dirname is used by express.static() in server.js
-// - api-enhanced reads runtime files from the temp dir at require-time
-//   (workerd's nodejs_compat provides an in-memory fs, so create them up front)
-globalThis.__dirname = "/";
-const tmpPath = os.tmpdir();
-const anonymousTokenPath = path.resolve(tmpPath, "./anonymous_token");
-if (!fs.existsSync(anonymousTokenPath)) {
-  fs.writeFileSync(anonymousTokenPath, "", "utf-8");
-}
-const xeapiKeyPath = path.resolve(tmpPath, "./xeapi_public_key");
-if (!fs.existsSync(xeapiKeyPath)) {
-  fs.writeFileSync(xeapiKeyPath, "", "utf-8");
-}
-
-// Dynamic imports so the code above runs before server.js -> util/request.js is loaded.
-const { constructServer } = await import("../server.js");
-const { moduleDefs } = await import("./_registry.js");
-
 let appPromise;
 
-function getApp() {
+async function getApp() {
   if (!appPromise) {
+    // Compatibility shims required before server.js is loaded:
+    // - __dirname is used by express.static() in server.js
+    // - api-enhanced reads runtime files from the temp dir at require-time
+    //   (workerd's nodejs_compat provides an in-memory fs, so create them up front)
+    globalThis.__dirname = "/";
+    const tmpPath = os.tmpdir();
+    const anonymousTokenPath = path.resolve(tmpPath, "./anonymous_token");
+    if (!fs.existsSync(anonymousTokenPath)) {
+      fs.writeFileSync(anonymousTokenPath, "", "utf-8");
+    }
+    const xeapiKeyPath = path.resolve(tmpPath, "./xeapi_public_key");
+    if (!fs.existsSync(xeapiKeyPath)) {
+      fs.writeFileSync(xeapiKeyPath, "", "utf-8");
+    }
+
+    // Dynamic imports: they run after the shims above, so server.js's
+    // require-time file reads succeed. No top-level await (ES2015 target).
+    const { constructServer } = await import("../server.js");
+    const { moduleDefs } = await import("./_registry.js");
     appPromise = constructServer(moduleDefs).catch((err) => {
       console.error("constructServer failed", err);
       throw err;
